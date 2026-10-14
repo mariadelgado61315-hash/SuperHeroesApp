@@ -1,33 +1,42 @@
 package co.edu.ucaldas.aplicacion1
 
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.*
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.navigation.NavType
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
-import androidx.navigation.compose.rememberNavController
-import androidx.navigation.navArgument
-import co.edu.ucaldas.aplicacion1.ui.theme.Aplicacion1Theme
 import co.edu.ucaldas.aplicacion1.ui.theme.HeroCard
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            Aplicacion1Theme {
+            MaterialTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    AppNavigation()
+                    val viewModel: SuperHeroesViewModel = viewModel()
+                    SuperHeroesListScreen(viewModel = viewModel)
                 }
             }
         }
@@ -35,76 +44,71 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun AppNavigation(viewModel: SuperHeroesViewModel = viewModel()) {
-    val navController = rememberNavController()
-    val superheroes by viewModel.superheroes.collectAsState()
-
-    NavHost(
-        navController = navController,
-        startDestination = Utils.Rutas.LISTA
-    ) {
-        composable(Utils.Rutas.LISTA) {
-            ListaSuperHeroes(
-                superheroes = superheroes,
-                onVerDetalle = { id ->
-                    navController.navigate(Utils.Rutas.detalle(id))
-                }
-            )
-        }
-
-        composable(
-            route = Utils.Rutas.DETALLE,
-            arguments = listOf(navArgument("id") { type = NavType.IntType })
-        ) { backStackEntry ->
-            val id = backStackEntry.arguments?.getInt("id") ?: return@composable
-            val hero = viewModel.obtenerHeroePorId(id) ?: return@composable
-
-            DetalleSuperHeroe(
-                hero = hero,
-                onVolver = { navController.popBackStack() }
-            )
-        }
-    }
-}
-
-@Composable
-fun ListaSuperHeroes(
-    superheroes: List<Nombres>,
-    onVerDetalle: (Int) -> Unit
+fun SuperHeroesListScreen(
+    viewModel: SuperHeroesViewModel
 ) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        items(superheroes, key = { it.id }) { heroe ->
-            HeroCard(
-                hero = heroe,
-                onClick = { onVerDetalle(heroe.id) }
-            )
-        }
-    }
-}
+    val context = LocalContext.current
+    var searchQuery by remember { mutableStateOf("") }
 
-@Composable
-fun DetalleSuperHeroe(
-    hero: Nombres,
-    onVolver: () -> Unit
-) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+    // Estado para guardar los "Me gusta" o selección de cada superhéroe por su ID
+    val likesMap = remember { mutableStateMapOf<Int, Int>() }
+
+    // Obtenemos la lista del StateFlow superheroes
+    val heroesList by viewModel.superheroes.collectAsState()
+
+    val filteredHeroes: List<Nombres> = heroesList.filter { hero ->
+        hero.nombre.contains(searchQuery, ignoreCase = true) ||
+                hero.descripcion.contains(searchQuery, ignoreCase = true)
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)
     ) {
-        item {
-            HeroCard(hero = hero, option = 1)
-        }
-        item {
-            Button(
-                onClick = onVolver,
-                modifier = Modifier.fillMaxWidth()
+        // Campo de búsqueda
+        OutlinedTextField(
+            value = searchQuery,
+            onValueChange = { searchQuery = it },
+            label = { Text("Buscar superhéroe...") },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 12.dp),
+            singleLine = true
+        )
+
+        // Si la búsqueda no arroja resultados
+        if (filteredHeroes.isEmpty()) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
             ) {
-                Text("Volver a la lista")
+                Text("No se encontraron superhéroes")
+            }
+        } else {
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                items(
+                    count = filteredHeroes.size
+                ) { index ->
+                    val heroItem: Nombres = filteredHeroes[index]
+                    val currentOption = likesMap[heroItem.id] ?: 0
+
+                    HeroCard(
+                        hero = heroItem,
+                        option = currentOption,
+                        onClick = {
+                            // Incrementa el contador o activa la opción al presionar
+                            likesMap[heroItem.id] = currentOption + 1
+                            Toast.makeText(
+                                context,
+                                "¡Te gusta ${heroItem.nombre}!",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    )
+                }
             }
         }
     }
